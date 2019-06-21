@@ -14,10 +14,12 @@ import com.samourai.wallet.hd.HD_WalletFactory;
 import com.samourai.wallet.payload.PayloadUtil;
 import com.samourai.wallet.segwit.BIP49Util;
 import com.samourai.wallet.segwit.BIP84Util;
+import com.samourai.wallet.send.BlockedUTXO;
 import com.samourai.wallet.send.RBFUtil;
 import com.samourai.wallet.util.AddressFactory;
 import com.samourai.wallet.util.FormatsUtil;
 import com.samourai.wallet.util.SentToFromBIP47Util;
+import com.samourai.wallet.whirlpool.WhirlpoolMeta;
 
 import org.bitcoinj.crypto.MnemonicException;
 import org.json.JSONArray;
@@ -55,6 +57,7 @@ public class BalanceViewModel extends AndroidViewModel {
 
     public BalanceViewModel(@NonNull Application application) {
         super(application);
+        toggleSat.setValue(false);
 
         try {
             JSONObject response = PayloadUtil.getInstance(application).deserializeMultiAddr();
@@ -71,11 +74,9 @@ public class BalanceViewModel extends AndroidViewModel {
                             Collections.sort(txes, new APIFactory.TxMostRecentDateComparator());
                             txs.postValue(txes);
                             toggleSat.setValue(false);
-                            balance.postValue(xpub_balance);
-                            Log.i(TAG, "BalanceViewModel: disposable.complee".concat(String.valueOf(txes.size())));
+                            balance.postValue(xpub_balance- BlockedUTXO.getInstance().getTotalValueBlocked());
 
                         }, error -> {
-                            Log.i(TAG, "BalanceViewModel: disposable.error ".concat(error.getMessage()));
                             txs.postValue(new ArrayList<>());
                             toggleSat.setValue(false);
                             balance.postValue(0L);
@@ -110,13 +111,18 @@ public class BalanceViewModel extends AndroidViewModel {
         return balance;
     }
 
-    public MutableLiveData<Boolean> getSatState() {
+    MutableLiveData<Boolean> getSatState() {
         return toggleSat;
     }
 
-    public void toggleSat() {
+    void toggleSat() {
 
-        this.toggleSat.setValue(!toggleSat.getValue());
+        if (toggleSat.getValue() == null) {
+            this.toggleSat.setValue(false);
+        } else {
+            this.toggleSat.setValue(!toggleSat.getValue());
+        }
+
     }
 
     public void setTx(List<Tx> txes) {
@@ -167,19 +173,22 @@ public class BalanceViewModel extends AndroidViewModel {
                         if (addrObj != null && addrObj.has("final_balance") && addrObj.has("address")) {
                             if (FormatsUtil.getInstance().isValidXpub((String) addrObj.get("address"))) {
                                 xpub_amounts.put((String) addrObj.get("address"), addrObj.getLong("final_balance"));
+
                                 if (addrObj.getString("address").equals(BIP84Util.getInstance(getApplication()).getWallet().getAccount(0).xpubstr()) ||
                                         addrObj.getString("address").equals(BIP84Util.getInstance(getApplication()).getWallet().getAccount(0).zpubstr())) {
                                     AddressFactory.getInstance().setHighestBIP84ReceiveIdx(addrObj.has("account_index") ? addrObj.getInt("account_index") : 0);
                                     AddressFactory.getInstance().setHighestBIP84ChangeIdx(addrObj.has("change_index") ? addrObj.getInt("change_index") : 0);
                                     BIP84Util.getInstance(getApplication()).getWallet().getAccount(0).getChain(0).setAddrIdx(addrObj.has("account_index") ? addrObj.getInt("account_index") : 0);
                                     BIP84Util.getInstance(getApplication()).getWallet().getAccount(0).getChain(1).setAddrIdx(addrObj.has("change_index") ? addrObj.getInt("change_index") : 0);
-                                } else if (addrObj.getString("address").equals(BIP49Util.getInstance(getApplication()).getWallet().getAccount(0).xpubstr()) ||
+                                }
+                                else if (addrObj.getString("address").equals(BIP49Util.getInstance(getApplication()).getWallet().getAccount(0).xpubstr()) ||
                                         addrObj.getString("address").equals(BIP49Util.getInstance(getApplication()).getWallet().getAccount(0).ypubstr())) {
                                     AddressFactory.getInstance().setHighestBIP49ReceiveIdx(addrObj.has("account_index") ? addrObj.getInt("account_index") : 0);
                                     AddressFactory.getInstance().setHighestBIP49ChangeIdx(addrObj.has("change_index") ? addrObj.getInt("change_index") : 0);
                                     BIP49Util.getInstance(getApplication()).getWallet().getAccount(0).getChain(0).setAddrIdx(addrObj.has("account_index") ? addrObj.getInt("account_index") : 0);
                                     BIP49Util.getInstance(getApplication()).getWallet().getAccount(0).getChain(1).setAddrIdx(addrObj.has("change_index") ? addrObj.getInt("change_index") : 0);
-                                } else if (AddressFactory.getInstance().xpub2account().get((String) addrObj.get("address")) != null) {
+                                }
+                                else if (AddressFactory.getInstance().xpub2account().get((String) addrObj.get("address")) != null) {
                                     AddressFactory.getInstance().setHighestTxReceiveIdx(AddressFactory.getInstance().xpub2account().get((String) addrObj.get("address")), addrObj.has("account_index") ? addrObj.getInt("account_index") : 0);
                                     AddressFactory.getInstance().setHighestTxChangeIdx(AddressFactory.getInstance().xpub2account().get((String) addrObj.get("address")), addrObj.has("change_index") ? addrObj.getInt("change_index") : 0);
 
